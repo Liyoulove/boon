@@ -38,6 +38,8 @@ import sun.misc.Unsafe;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
@@ -787,5 +789,17 @@ public class Reflection {
 
     public static Object invoke (Object object, String name, List<?> args){
         return ClassMeta.classMeta( object.getClass() ).invokeUntyped(object, name, args.toArray(new Object[args.size()]));
+    }
+    /*
+     * copy from fastjson
+     */
+    public static Class<?> getRawClass(Type type){
+        if(type instanceof Class<?>){
+            return (Class<?>) type;
+        } else if(type instanceof ParameterizedType){
+            return getRawClass(((ParameterizedType) type).getRawType());
+        } else{
+        	throw new RuntimeException(Reflection.class + " can not get a rawClass from " + type.getTypeName());
+        }
     }
 }

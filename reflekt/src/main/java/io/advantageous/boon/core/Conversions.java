@@ -28,10 +28,11 @@
 
 package io.advantageous.boon.core;
 
-import io.advantageous.boon.core.reflection.*;
-import io.advantageous.boon.primitive.Arry;
+import static io.advantageous.boon.core.Typ.isArray;
 
 import java.lang.reflect.Array;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.text.DateFormat;
@@ -39,12 +40,39 @@ import java.text.ParseException;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.util.*;
+import java.util.AbstractCollection;
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Currency;
+import java.util.Date;
+import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedHashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.SortedMap;
+import java.util.SortedSet;
+import java.util.TimeZone;
+import java.util.TreeMap;
+import java.util.TreeSet;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.logging.Logger;
 
-import static io.advantageous.boon.core.Typ.isArray;
+import io.advantageous.boon.core.reflection.BeanUtils;
+import io.advantageous.boon.core.reflection.ClassMeta;
+import io.advantageous.boon.core.reflection.ConstructorAccess;
+import io.advantageous.boon.core.reflection.FastStringUtils;
+import io.advantageous.boon.core.reflection.MapObjectConversion;
+import io.advantageous.boon.core.reflection.Reflection;
+import io.advantageous.boon.primitive.Arry;
 
 
 public class Conversions {
@@ -1447,7 +1475,40 @@ public class Conversions {
         }
 
     }
-
+    /*
+     * copy from fastjson
+     */
+    public static Collection createCollection(Type type) {
+        Class<?> rawClass = Reflection.getRawClass(type);
+        Collection list = Collections.EMPTY_LIST;
+        if(rawClass == AbstractCollection.class //
+                || rawClass == Collection.class){
+            list = new ArrayList();
+        } else if(rawClass.isAssignableFrom(HashSet.class)){
+            list = new HashSet();
+        } else if(rawClass.isAssignableFrom(LinkedHashSet.class)){
+            list = new LinkedHashSet();
+        } else if(rawClass.isAssignableFrom(TreeSet.class)){
+            list = new TreeSet();
+        } else if(rawClass.isAssignableFrom(ArrayList.class)){
+            list = new ArrayList();
+        } else if(rawClass.isAssignableFrom(EnumSet.class)){
+            Type itemType;
+            if(type instanceof ParameterizedType){
+                itemType = ((ParameterizedType) type).getActualTypeArguments()[0];
+            } else{
+                itemType = Object.class;
+            }
+            list = EnumSet.noneOf((Class<Enum>) itemType);
+        } else{
+            try{
+                list = (Collection) rawClass.newInstance();
+            } catch(Exception e){
+            	Exceptions.die(Conversions.class, "create instance error, class " + rawClass.getName());
+            }
+        }
+        return list;
+    }
 
     public static Map<?, ?> createMap(Class<?> type, int size) {
 

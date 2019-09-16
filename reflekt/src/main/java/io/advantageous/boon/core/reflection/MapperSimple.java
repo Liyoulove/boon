@@ -1,37 +1,44 @@
 package io.advantageous.boon.core.reflection;
 
-import io.advantageous.boon.core.Exceptions;
-import io.advantageous.boon.core.Str;
-import io.advantageous.boon.core.reflection.fields.FieldAccess;
-import io.advantageous.boon.core.reflection.fields.FieldAccessMode;
-import io.advantageous.boon.core.value.ValueList;
-import io.advantageous.boon.core.Lists;
+import static io.advantageous.boon.core.Conversions.coerce;
+import static io.advantageous.boon.core.Conversions.toEnum;
+import static io.advantageous.boon.core.Exceptions.handle;
+import static io.advantageous.boon.core.TypeType.INSTANCE;
+import static io.advantageous.boon.core.TypeType.gatherActualTypes;
+import static io.advantageous.boon.core.TypeType.gatherTypes;
+
+import java.lang.reflect.Array;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
 import io.advantageous.boon.core.Conversions;
+import io.advantageous.boon.core.Exceptions;
+import io.advantageous.boon.core.Lists;
+import io.advantageous.boon.core.Str;
 import io.advantageous.boon.core.Typ;
 import io.advantageous.boon.core.TypeType;
 import io.advantageous.boon.core.Value;
+import io.advantageous.boon.core.reflection.fields.FieldAccess;
+import io.advantageous.boon.core.reflection.fields.FieldAccessMode;
 import io.advantageous.boon.core.reflection.fields.FieldsAccessor;
 import io.advantageous.boon.core.value.ValueContainer;
+import io.advantageous.boon.core.value.ValueList;
 import io.advantageous.boon.core.value.ValueMap;
 import io.advantageous.boon.core.value.ValueMapImpl;
 import io.advantageous.boon.primitive.Arry;
 import io.advantageous.boon.primitive.CharBuf;
 
-import java.lang.reflect.Array;
-import java.lang.reflect.ParameterizedType;
-import java.lang.reflect.Type;
-import java.util.*;
-
-import static io.advantageous.boon.core.Str.sputs;
-import static io.advantageous.boon.core.Exceptions.die;
-import static io.advantageous.boon.core.Exceptions.handle;
-import static io.advantageous.boon.core.Conversions.coerce;
-import static io.advantageous.boon.core.Conversions.toEnum;
-import static io.advantageous.boon.core.TypeType.*;
-
 /**
  * Created by Richard on 9/18/14.
  */
+@SuppressWarnings({"rawtypes","unchecked"})
 public class MapperSimple implements Mapper {
 
 
@@ -54,7 +61,7 @@ public class MapperSimple implements Mapper {
      * @param <T> generics
      * @return a new list
      */
-    @Override
+	@Override
     public  <T> List<T> convertListOfMapsToObjects(List<Map> list, Class<T> componentType) {
         List<Object> newList = new ArrayList<>( list.size() );
         for ( Object obj : list ) {
@@ -194,111 +201,145 @@ public class MapperSimple implements Mapper {
      */
     @Override
     public  <T> T fromList(List<?> argList, Class<T> clazz) {
-
-        /* Size of the arguments. */
-        int size = argList.size();
-
-
-        /* Meta data holder of the class. */
-        ClassMeta<T> classMeta = ClassMeta.classMeta( clazz );
-
-        /* The constructor to match. */
-        ConstructorAccess<T> constructorToMatch = null;
-
-        /* The final arguments. */
-        Object[] finalArgs = null;
-
-
-        boolean[] flag = new boolean[1];
-        List<Object> convertedArguments = null;
-
-
-        try {
-
-
-        /* List to hold items that we coerce into parameter types. */
-            convertedArguments  = new ArrayList<>( argList );
-
-            constructorToMatch = lookupConstructorMeta( size,
-                    convertedArguments, classMeta, constructorToMatch, flag, false);
-
-
-
-        /* List to hold items that we coerce into parameter types. */
-            if (constructorToMatch == null) {
-                convertedArguments = new ArrayList<>( argList );
-                constructorToMatch = lookupConstructorMeta( size,
-                        convertedArguments, classMeta, constructorToMatch, flag, true);
-            }
-
-
-
-
-            /* If we were not able to match then we bail. */
-            if ( constructorToMatch != null ) {
-                finalArgs = convertedArguments.toArray( new Object[argList.size()] );
-                return constructorToMatch.create( finalArgs );
-            } else {
-                return (T) Exceptions.die(Object.class, "Unable to convert list", convertedArguments, "into", clazz);
-            }
-
-            /* Catch all of the exceptions and try to report why this failed.
-            * Since we are doing reflection and a bit of "magic", we have to be clear as to why/how things failed.
-            * */
-        } catch ( Exception e ) {
-
-
-            if (constructorToMatch != null)  {
-
-
-                CharBuf buf = CharBuf.create(200);
-                buf.addLine();
-                buf.multiply('-', 10).add("FINAL ARGUMENTS").multiply('-', 10).addLine();
-                if (finalArgs!=null) {
-                    for (Object o : finalArgs) {
-                        buf.puts("argument type    ", ClassMeta.className(o));
-                    }
-                }
-
-
-                buf.multiply('-', 10).add("CONSTRUCTOR").add(constructorToMatch).multiply('-', 10).addLine();
-                buf.multiply('-', 10).add("CONSTRUCTOR PARAMS").multiply('-', 10).addLine();
-                for (Class<?> c : constructorToMatch.parameterTypes()) {
-                    buf.puts("constructor type ", c);
-                }
-
-                buf.multiply('-', 35).addLine();
-
-
-
-                buf.addLine("PARAMETER TYPES");
-                buf.add(Lists.list(constructorToMatch.parameterTypes())).addLine();
-
-                buf.addLine("ORIGINAL TYPES PASSED");
-                buf.add(gatherTypes(convertedArguments)).addLine();
-
-                buf.add(gatherActualTypes(convertedArguments)).addLine();
-
-                buf.addLine("CONVERTED ARGUMENT TYPES");
-                buf.add(gatherTypes(convertedArguments)).addLine();
-                buf.add(gatherActualTypes(convertedArguments)).addLine();
-
-                //Boon.error( e, "unable to create object based on constructor", buf );
-
-
-                return ( T ) handle(Object.class, e, buf.toString());
-            } else {
-                return ( T ) handle(Object.class, e,
-                        "\nlist args after conversion", convertedArguments, "types",
-                        gatherTypes(convertedArguments),
-                        "\noriginal args", argList,
-                        "original types", gatherTypes(argList));
-
-            }
-        }
-
+    	
+    	/* Size of the arguments. */
+    	int size = argList.size();
+    	
+    	
+    	/* Meta data holder of the class. */
+    	ClassMeta<T> classMeta = ClassMeta.classMeta( clazz );
+    	
+    	/* The constructor to match. */
+    	ConstructorAccess<T> constructorToMatch = null;
+    	
+    	/* The final arguments. */
+    	Object[] finalArgs = null;
+    	
+    	
+    	boolean[] flag = new boolean[1];
+    	List<Object> convertedArguments = null;
+    	
+    	
+    	try {
+    		
+    		
+    		/* List to hold items that we coerce into parameter types. */
+    		convertedArguments  = new ArrayList<>( argList );
+    		
+    		constructorToMatch = lookupConstructorMeta( size,
+    				convertedArguments, classMeta, constructorToMatch, flag, false);
+    		
+    		
+    		
+    		/* List to hold items that we coerce into parameter types. */
+    		if (constructorToMatch == null) {
+    			convertedArguments = new ArrayList<>( argList );
+    			constructorToMatch = lookupConstructorMeta( size,
+    					convertedArguments, classMeta, constructorToMatch, flag, true);
+    		}
+    		
+    		
+    		
+    		
+    		/* If we were not able to match then we bail. */
+    		if ( constructorToMatch != null ) {
+    			finalArgs = convertedArguments.toArray( new Object[argList.size()] );
+    			return constructorToMatch.create( finalArgs );
+    		} else {
+    			return (T) Exceptions.die(Object.class, "Unable to convert list", convertedArguments, "into", clazz);
+    		}
+    		
+    		/* Catch all of the exceptions and try to report why this failed.
+    		 * Since we are doing reflection and a bit of "magic", we have to be clear as to why/how things failed.
+    		 * */
+    	} catch ( Exception e ) {
+    		
+    		
+    		if (constructorToMatch != null)  {
+    			
+    			
+    			CharBuf buf = CharBuf.create(200);
+    			buf.addLine();
+    			buf.multiply('-', 10).add("FINAL ARGUMENTS").multiply('-', 10).addLine();
+    			if (finalArgs!=null) {
+    				for (Object o : finalArgs) {
+    					buf.puts("argument type    ", ClassMeta.className(o));
+    				}
+    			}
+    			
+    			
+    			buf.multiply('-', 10).add("CONSTRUCTOR").add(constructorToMatch).multiply('-', 10).addLine();
+    			buf.multiply('-', 10).add("CONSTRUCTOR PARAMS").multiply('-', 10).addLine();
+    			for (Class<?> c : constructorToMatch.parameterTypes()) {
+    				buf.puts("constructor type ", c);
+    			}
+    			
+    			buf.multiply('-', 35).addLine();
+    			
+    			
+    			
+    			buf.addLine("PARAMETER TYPES");
+    			buf.add(Lists.list(constructorToMatch.parameterTypes())).addLine();
+    			
+    			buf.addLine("ORIGINAL TYPES PASSED");
+    			buf.add(gatherTypes(convertedArguments)).addLine();
+    			
+    			buf.add(gatherActualTypes(convertedArguments)).addLine();
+    			
+    			buf.addLine("CONVERTED ARGUMENT TYPES");
+    			buf.add(gatherTypes(convertedArguments)).addLine();
+    			buf.add(gatherActualTypes(convertedArguments)).addLine();
+    			
+    			//Boon.error( e, "unable to create object based on constructor", buf );
+    			
+    			
+    			return ( T ) handle(Object.class, e, buf.toString());
+    		} else {
+    			return ( T ) handle(Object.class, e,
+    					"\nlist args after conversion", convertedArguments, "types",
+    					gatherTypes(convertedArguments),
+    					"\noriginal args", argList,
+    					"original types", gatherTypes(argList));
+    			
+    		}
+    	}
+    	
+    }
+    public  <T> T fromList(List<?> argList,FieldAccess field) {
+    	return this.fromList(argList, field.getParameterizedType());
     }
 
+    /*
+     * 反序列化多层泛型字段如List<List<String>> List<List<User>> 
+     */
+	public <T> T fromList(List args,Type type) {
+    		type = ((ParameterizedType)type).getActualTypeArguments()[0];
+    		if(type instanceof Class) {
+    			return (T) convertListOfMapsToObjects((List<Map>)args, (Class<T>)type);
+    		}
+    		if(type instanceof ParameterizedType) {
+    			Collection collection = Conversions.createCollection(type);
+    			type = ((ParameterizedType)type).getActualTypeArguments()[0];
+    			for (Value value : ( List<Value> )args) {
+    				Object oValue = value.toValue();
+    				if(oValue instanceof Map) {
+    					collection.add(fromMapByType((Map)oValue, type));
+    				}
+					if(oValue instanceof List) {
+						collection.add(fromList((List)oValue,type));
+					}
+					collection.add(oValue);
+				}
+    			return (T) collection;
+    		}
+    	return null;
+    }
+    public <T> T fromMapByType(Map map,Type type) {
+    	if(type instanceof Class) {
+    		return (T) fromMap(map, (Class<T>)type);
+    	}
+    	return null;
+    }
 
 
 
@@ -321,10 +362,7 @@ public class MapperSimple implements Mapper {
      * @param newInstance  new instance we are injecting field into
      * @param field    field we are injecting a value into
      */
-    @SuppressWarnings("unchecked")
-    private  void handleCollectionOfMaps( Object newInstance,
-                                          FieldAccess field, Collection<Map<String, Object>> collectionOfMaps
-    ) {
+    private  void handleCollectionOfMaps( Object newInstance,FieldAccess field, Collection<Map<String, Object>> collectionOfMaps) {
 
         Collection<Object> newCollection = Conversions.createCollection( field.type(), collectionOfMaps.size() );
 
@@ -439,11 +477,6 @@ public class MapperSimple implements Mapper {
                 case FLOAT:
                 case DOUBLE:
                 case LONG:
-                    if (item == null) {
-                        return false;
-                    }
-
-
                 case INTEGER_WRAPPER:
                 case BYTE_WRAPPER:
                 case SHORT_WRAPPER:
@@ -802,21 +835,13 @@ public class MapperSimple implements Mapper {
                             }
                             convertedArgumentList.set( index, value );
                             return true;
-
-
-
+						default:
+							break;
                     }
-
-
-
             }
-
-
             if ( parameterClass.isInstance( item ) ) {
                 return true;
             }
-
-
         } catch (Exception ex) {
 //            Boon.error(ex, "PROBLEM WITH oldMatchAndConvertArgs",
 //                    "fieldsAccessor", fieldsAccessor, "list", convertedArgumentList,
@@ -836,7 +861,6 @@ public class MapperSimple implements Mapper {
      * @param newInstance  new instance we are injecting field into
      * @param field    field we are injecting a value into
      */
-    @SuppressWarnings("unchecked")
     private  void handleCollectionOfValues(
             Object newInstance,
             FieldAccess field, Collection<Value> acollectionOfValues ) {
@@ -883,6 +907,9 @@ public class MapperSimple implements Mapper {
                         Object oValue = value.toValue();
                         if ( oValue instanceof Map ) {
                             newCollection.add( fromValueMap(  ( Map ) oValue, componentClass ) );
+                        }
+                        if(oValue instanceof List){
+                            newCollection.add(fromList((List)oValue,field));
                         }
                     } else {
                         newCollection.add( Conversions.coerce( componentClass, value.toValue() ) );
@@ -1022,6 +1049,8 @@ public class MapperSimple implements Mapper {
                         field.setValue( newInstance, array);
                 }
                 break;
+			default:
+				break;
         }
 
     }
@@ -1036,9 +1065,7 @@ public class MapperSimple implements Mapper {
      * @return new object from value map
      */
     @Override
-    @SuppressWarnings("unchecked")
-    public  Object fromValueMap(final Map<String, Value> valueMap
-    ) {
+    public  Object fromValueMap(final Map<String, Value> valueMap) {
 
 
         try {
@@ -1062,7 +1089,6 @@ public class MapperSimple implements Mapper {
      * @return new object from value map
      */
     @Override
-    @SuppressWarnings("unchecked")
     public  <T> T fromValueMap(final Map<String, Value> valueMap,
                                final Class<T> cls) {
 
@@ -1218,7 +1244,8 @@ public class MapperSimple implements Mapper {
                     case LIST:
                         objValue = fromList((List<Object>) objValue, clazz);
                         break;
-
+                    default:
+                    	break;
 
                 }
                 field.setValue(newInstance, objValue);
@@ -1673,7 +1700,8 @@ public class MapperSimple implements Mapper {
             case ARRAY_STRING:
             case ARRAY_OBJECT:
                 return Conversions.toList(object);
-
+			default:
+				break;
         }
         return Lists.list(object);
     }

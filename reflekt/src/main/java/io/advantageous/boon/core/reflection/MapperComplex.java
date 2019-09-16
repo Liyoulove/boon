@@ -140,7 +140,41 @@ public class MapperComplex implements Mapper {
         this.outputType = true;
     }
 
+    public  <T> T fromList(List<?> argList,FieldAccess field) {
+    	return this.fromList(argList, field.getParameterizedType());
+    }
 
+    /*
+     * 反序列化多层泛型字段如List<List<String>> List<List<User>> 
+     */
+	public <T> T fromList(List args,Type type) {
+    		type = ((ParameterizedType)type).getActualTypeArguments()[0];
+    		if(type instanceof Class) {
+    			return (T) convertListOfMapsToObjects((List<Map>)args, (Class<T>)type);
+    		}
+    		if(type instanceof ParameterizedType) {
+    			Collection collection = Conversions.createCollection(type);
+    			type = ((ParameterizedType)type).getActualTypeArguments()[0];
+    			for (Value value : ( List<Value> )args) {
+    				Object oValue = value.toValue();
+    				if(oValue instanceof Map) {
+    					collection.add(fromMapByType((Map)oValue, type));
+    				}
+					if(oValue instanceof List) {
+						collection.add(fromList((List)oValue,type));
+					}
+					collection.add(oValue);
+				}
+    			return (T) collection;
+    		}
+    	return null;
+    }
+    public <T> T fromMapByType(Map map,Type type) {
+    	if(type instanceof Class) {
+    		return (T) fromMap(map, (Class<T>)type);
+    	}
+    	return null;
+    }
     /**
          * This converts a list of maps to objects.
          * I always forget that this exists. I need to remember.
